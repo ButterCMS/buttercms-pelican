@@ -35,41 +35,58 @@ class ButterGenerator(ArticlesGenerator):
 
     # Private helper function to generate
     def _generate_butter_articles(self):
+        DEFAULT_CATEGORY = self.settings.get('DEFAULT_CATEGORY')
         baseReader = BaseReader(self.settings)
 
-        butter_result = self.client.posts.all()
+        butter_posts = []
+        page = 11
+        while True:
+            result = self.client.posts.all({'page_size': 10, 'page': page})
+            if 'data' in result:
+                butter_posts.extend(result['data'])
+                # break
+            if 'meta' in result and 'next_page' in result['meta'] and result['meta']['next_page']:
+                page += 1
+            else:
+                break
         all_articles = []
-        if 'data' in butter_result:
-            posts = butter_result['data']
-            for post in posts:
-                if post['status'] == 'published':
-                    datestr = post['published'] if 'published' in post else post['created']
-                    date = parser.parse(datestr)
-                    title = post['title']
-                    content = post['body']
-                    author = post['author']['first_name']
-                    authorObject = baseReader.process_metadata('author', author)
-                    slug = post['slug']
-                    if post['categories']:
-                        category = post['categories'][0]['name']
-                    else:
-                        category = ''
-                    categoryObj = baseReader.process_metadata('category', category)
+        counter = 0
+        for post in butter_posts:
+            if post['status'] == 'published':
+                counter += 1
+                logger.info('GET TO article: %s' % post['title'])
+                logger.info('counter: %s' % str(counter))
+                datestr = post['published'] if 'published' in post else post['created']
+                date = parser.parse(datestr)
+                title = post['title']
+                content = post['body']
+                author = post['author']['first_name']
+                authorObject = baseReader.process_metadata('author', author)
+                slug = post['slug'] if 'slug' in post else None
+                logger.info('--HAS slug: %s' % str(slug))
+                categoryObj = None
+                if post['categories']:
+                    category = post['categories'][0]['name']
+                else:
+                    category = DEFAULT_CATEGORY
+                categoryObj = baseReader.process_metadata('category', category)
 
-                    metadata = {'title': title,
-                                'date': date,
-                                'category': categoryObj,
-                                'authors': [authorObject],
-                                'slug': slug}
+                metadata = {'title': title,
+                            'date': date,
+                            'category': categoryObj,
+                            'authors': [authorObject]}
+                if slug:
+                    metadata['slug'] = slug
 
-                    article = Article(content=content,
-                                      metadata=metadata,
-                                      settings=self.settings,
-                                      context=self.context)
 
-                    # # This seems like it cannot happen... but it does without fail.
-                    article.author = article.authors[0]
-                    all_articles.append(article)
+                article = Article(content=content,
+                                  metadata=metadata,
+                                  settings=self.settings,
+                                  context=self.context)
+
+                # # This seems like it cannot happen... but it does without fail.
+                article.author = article.authors[0]
+                all_articles.append(article)
 
         return all_articles
 
@@ -121,6 +138,10 @@ class ButterGenerator(ArticlesGenerator):
         self.authors = list(self.authors.items())
         self.authors.sort()
 
+        logger.info('++++++++++++++++++++++++++++++++++++')
+        logger.info('GOT categories %s' % str(self.categories))
+        logger.info('++++++++++++++++++++++++++++++++++++')
+
         self._update_context(('articles', 'dates', 'categories', 'authors'))
         # Disabled for 3.3 compatibility for now, great.
         # self.save_cache()
@@ -129,9 +150,25 @@ class ButterGenerator(ArticlesGenerator):
         # And finish.
         # signals.article_generator_finalized.send(self)
 
-    def generate_output(self, writer):
-        # Intentionally leave this blank
-        pass
+    # def generate_output(self, writer):
+    #     # Intentionally leave this blank
+    #     pass
+
+    def generate_pages(self, writer):
+        """Generate the pages on the disk"""
+        write = partial(writer.write_file,
+                        relative_urls=self.settings['RELATIVE_URLS'],
+                        override_output=True)
+
+        # to minimize the number of relative path stuff modification
+        # in writer, articles pass first
+        # self.generate_articles(write)
+        self.generate_period_archives(write)
+        self.generate_direct_templates(write)
+
+        # and subfolders after that
+        self.generate_categories(write)
+        self.generate_authors(write)
 
 
 def get_generators(pelican_object):
