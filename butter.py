@@ -39,17 +39,18 @@ class ButterGenerator(ArticlesGenerator):
         baseReader = BaseReader(self.settings)
 
         butter_posts = []
-        page = 11
+        page = 1
         while True:
+            # Paginate through all pages
             result = self.client.posts.all({'page_size': 10, 'page': page})
             if 'data' in result:
                 butter_posts.extend(result['data'])
-                # break
+
             if 'meta' in result and 'next_page' in result['meta'] and result['meta']['next_page']:
                 page += 1
             else:
                 break
-        all_articles = []
+        # all_articles = []
         counter = 0
         for post in butter_posts:
             if post['status'] == 'published':
