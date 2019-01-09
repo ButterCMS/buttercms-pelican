@@ -50,7 +50,7 @@ class ButterGenerator(ArticlesGenerator):
                 page += 1
             else:
                 break
-        # all_articles = []
+        all_articles = []
         counter = 0
         for post in butter_posts:
             if post['status'] == 'published':
